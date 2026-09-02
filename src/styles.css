@@ -1,0 +1,73 @@
+﻿.animate-pulse-green {
+            animation: pulse-green 0.5s ease-in-out;
+        }
+        .animate-pulse-red {
+            animation: pulse-red 0.5s ease-in-out;
+        }
+        @keyframes pulse-green {
+            0%, 100% { background-color: transparent; }
+            50% { background-color: rgba(34, 197, 94, 0.2); }
+        }
+        @keyframes pulse-red {
+            0%, 100% { background-color: transparent; }
+            50% { background-color: rgba(239, 68, 68, 0.2); }
+        }
+        #reader video {
+            object-fit: cover !important;
+            border-radius: 0.75rem;
+        }
+
+        #toast {
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .mobile-menu-btn {
+            display: none;
+        }
+
+        @media (max-width: 640px), (orientation: landscape) and (max-height: 640px) {
+            header .header-inner {
+                flex-wrap: nowrap;
+            }
+
+            .mobile-menu-btn {
+                display: inline-flex;
+            }
+
+            header .header-actions {
+                display: none;
+                position: absolute;
+                top: 100%;
+                left: 0.75rem;
+                right: 0.75rem;
+                width: auto;
+                padding: 0.75rem;
+                border: 1px solid rgb(51 65 85);
+                border-radius: 0.75rem;
+                background: rgb(15 23 42);
+                box-shadow: 0 10px 25px rgb(0 0 0 / 0.25);
+            }
+
+            header .header-actions.is-open {
+                width: auto;
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            header .header-actions > * {
+                width: 100%;
+                justify-content: center;
+            }
+
+            header .header-actions label {
+                justify-content: center;
+            }
+
+            #lastScanContent h3 {
+                overflow-wrap: anywhere;
+            }
+
+            table {
+                min-width: 680px;
+            }
+        }
