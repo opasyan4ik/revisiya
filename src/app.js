@@ -11,6 +11,7 @@
         let completionNotified = false;
         let toastTimer = null;
         let lastManualScanTime = 0; // защита от двойного Enter при ручном вводе
+        let pendingUnknownBarcode = '';
 
         const STORAGE_KEY = 'inventory_audit_state_v1';
 
@@ -36,9 +37,10 @@
         const saveStatus = document.getElementById('saveStatus');
         const searchInput = document.getElementById('searchInput');
         const sortSelect = document.getElementById('sortSelect');
+        const submitBarcodeBtn = document.getElementById('submitBarcodeBtn');
         const toast = document.getElementById('toast');
         const menuToggleBtn = document.getElementById('menuToggleBtn');
-        barcodeInput.placeholder = 'Введите штрихкод или артикул и нажмите Enter...';
+        barcodeInput.placeholder = 'Введите штрихкод или артикул...';
 
         menuToggleBtn.addEventListener('click', () => {
             const isOpen = menuToggleBtn.getAttribute('aria-expanded') === 'true';
@@ -468,19 +470,29 @@
             reader.readAsArrayBuffer(file);
         });
 
+        function submitManualBarcode() {
+            const now = Date.now();
+            if (now - lastManualScanTime < 300) return; // игнорируем слишком быстрые повторы
+            lastManualScanTime = now;
+
+            const code = barcodeInput.value.trim();
+            if (!code) {
+                barcodeInput.focus();
+                showToast('Введите штрихкод или артикул.', 'rose');
+                return;
+            }
+
+            barcodeInput.value = '';
+            processBarcode(code);
+            barcodeInput.focus();
+        }
+
+        submitBarcodeBtn.addEventListener('click', submitManualBarcode);
+
         barcodeInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                const now = Date.now();
-                if (now - lastManualScanTime < 300) return; // игнорируем слишком быстрые повторы
-                lastManualScanTime = now;
-
-                const code = barcodeInput.value.trim();
-                barcodeInput.value = '';
-
-                if (!code) return;
-
-                processBarcode(code);
+                submitManualBarcode();
             }
         });
 
@@ -540,6 +552,7 @@
         }
 
         function showErrorScan(code, errorMsg) {
+            pendingUnknownBarcode = normalizeBarcode(code);
             lastScanBadge.classList.remove('hidden');
             lastScanBadge.textContent = 'ОШИБКА';
             lastScanBadge.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-700';
@@ -551,8 +564,114 @@
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         ${escapeHtml(errorMsg)}
                     </div>
+                    ${inventoryData.length > 0 && pendingUnknownBarcode ? `
+                        <div class="mt-3 rounded-lg bg-white/70 p-3 border border-rose-100">
+                            <div class="text-xs text-slate-500 mb-1">Считанный штрихкод</div>
+                            <div class="font-mono font-bold text-slate-900 break-all">${escapeHtml(pendingUnknownBarcode)}</div>
+                            <button id="showAddUnknownBtn" type="button" class="mt-3 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition">
+                                Добавить в список
+                            </button>
+                            <form id="addUnknownForm" class="hidden mt-3 grid gap-3" novalidate>
+                                <div class="grid gap-3 sm:grid-cols-2">
+                                    <label class="text-xs font-semibold text-slate-600">
+                                        Артикул <span class="font-normal text-slate-400">(необязательно)</span>
+                                        <input id="unknownSkuInput" type="text" maxlength="100" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="Например, ART-105">
+                                    </label>
+                                    <label class="text-xs font-semibold text-slate-600">
+                                        Количество <span class="text-rose-500">*</span>
+                                        <input id="unknownQuantityInput" type="number" min="1" step="1" inputmode="numeric" value="1" required class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                                    </label>
+                                </div>
+                                <label class="text-xs font-semibold text-slate-600">
+                                    Наименование <span class="font-normal text-slate-400">(необязательно)</span>
+                                    <input id="unknownNameInput" type="text" maxlength="200" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="Если известно">
+                                </label>
+                                <div class="flex flex-wrap gap-2">
+                                    <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition">Сохранить товар</button>
+                                    <button id="cancelAddUnknownBtn" type="button" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold transition">Отмена</button>
+                                </div>
+                            </form>
+                        </div>
+                    ` : ''}
                 </div>
             `;
+
+            const showAddButton = document.getElementById('showAddUnknownBtn');
+            const addForm = document.getElementById('addUnknownForm');
+            const cancelAddButton = document.getElementById('cancelAddUnknownBtn');
+            const quantityInput = document.getElementById('unknownQuantityInput');
+            const skuInput = document.getElementById('unknownSkuInput');
+            const nameInput = document.getElementById('unknownNameInput');
+
+            if (showAddButton && addForm) {
+                showAddButton.addEventListener('click', () => {
+                    showAddButton.classList.add('hidden');
+                    addForm.classList.remove('hidden');
+                    quantityInput?.focus();
+                });
+            }
+            if (cancelAddButton && addForm && showAddButton) {
+                cancelAddButton.addEventListener('click', () => {
+                    addForm.reset();
+                    quantityInput.value = '1';
+                    addForm.classList.add('hidden');
+                    showAddButton.classList.remove('hidden');
+                });
+            }
+            if (addForm) {
+                addForm.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    addUnknownItem({
+                        barcode: pendingUnknownBarcode,
+                        sku: skuInput.value,
+                        name: nameInput.value,
+                        quantity: quantityInput.value
+                    });
+                });
+            }
+        }
+
+        function addUnknownItem({ barcode, sku, name, quantity }) {
+            const normalizedBarcode = normalizeBarcode(barcode);
+            const existingItem = inventoryData.find(item => normalizeBarcode(item.barcode).toLocaleLowerCase('ru-RU') === normalizedBarcode.toLocaleLowerCase('ru-RU'));
+            if (existingItem) {
+                lastScannedItem = { ...existingItem, isError: false, message: 'Товар уже есть в списке' };
+                renderLastScanned();
+                showToast('Этот штрихкод уже есть в списке.', 'rose');
+                return;
+            }
+
+            const parsedQuantity = parseQuantity(quantity);
+            if (!Number.isInteger(parsedQuantity) || parsedQuantity < 1) {
+                showToast('Количество должно быть целым числом не меньше 1.', 'rose');
+                return;
+            }
+
+            const item = {
+                id: inventoryData.reduce((maxId, current) => Math.max(maxId, Number(current.id) || 0), 0) + 1,
+                barcode: normalizedBarcode,
+                sku: String(sku ?? '').trim() || '-',
+                name: String(name ?? '').trim() || 'Новый товар',
+                plan: 0,
+                fact: parsedQuantity,
+                isManual: true
+            };
+
+            inventoryData.push(item);
+            pendingUnknownBarcode = '';
+            lastScannedItem = {
+                ...item,
+                isError: false,
+                message: 'Товар добавлен вручную'
+            };
+            playSoundCountUp();
+            triggerCardAnimation('green');
+            renderLastScanned();
+            renderTable();
+            updateSummary();
+            saveState();
+            showToast(`Товар добавлен. Количество: ${parsedQuantity}`);
+            barcodeInput.focus();
         }
 
         function renderLastScanned() {
@@ -570,7 +689,10 @@
             const isCompleted = item.fact >= item.plan;
 
             lastScanBadge.classList.remove('hidden');
-            if (item.fact > item.plan) {
+            if (item.isManual) {
+                lastScanBadge.textContent = 'Добавлен вручную';
+                lastScanBadge.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-violet-100 text-violet-800';
+            } else if (item.fact > item.plan) {
                 lastScanBadge.textContent = 'Излишек';
                 lastScanBadge.className = 'text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800';
             } else if (isCompleted) {
@@ -585,6 +707,7 @@
                 <div class="grid gap-4 md:grid-cols-[1fr_280px] md:items-start">
                     <div class="order-2 md:order-1">
                         <h3 class="text-xl md:text-2xl font-bold text-slate-900 leading-snug mb-2">${escapeHtml(item.name)}</h3>
+                        ${item.isManual ? '<div class="text-xs font-semibold text-violet-600 mb-2">Добавлен вручную во время ревизии</div>' : ''}
                         <div class="flex flex-wrap gap-4 text-sm text-slate-500 font-mono">
                             <span>Артикул: <strong class="text-slate-800">${escapeHtml(item.sku)}</strong></span>
                             <span>Штрихкод: <strong class="text-slate-800">${escapeHtml(item.barcode)}</strong></span>
@@ -744,7 +867,10 @@
                         </td>
                         <td class="py-3 px-4 font-mono text-xs text-slate-600 font-semibold">${item.barcode ? escapeHtml(item.barcode) : '<span class="text-slate-400 italic">Нет штрихкода</span>'}</td>
                         <td class="py-3 px-4 font-mono text-xs text-slate-600">${escapeHtml(item.sku)}</td>
-                        <td class="py-3 px-4 font-medium text-slate-800">${escapeHtml(item.name)}</td>
+                        <td class="py-3 px-4 font-medium text-slate-800">
+                            ${escapeHtml(item.name)}
+                            ${item.isManual ? '<span class="ml-2 inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">Вручную</span>' : ''}
+                        </td>
                         <td class="py-3 px-4 text-center font-bold text-slate-600">${item.plan}</td>
                         <td class="py-3 px-4 text-center">
                             <input type="number" min="0" step="1" inputmode="numeric" value="${item.fact}" data-item-id="${item.id}" aria-label="Фактическое количество" class="fact-table-input w-20 max-w-full rounded-lg border border-transparent bg-slate-100 px-2 py-1 text-center font-bold ${isOver ? 'text-amber-900' : isCompleted ? 'text-emerald-900' : 'text-slate-800'} focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100">
@@ -832,7 +958,7 @@
                     'Наименование': item.name,
                     'План': item.plan,
                     'Факт': item.fact,
-                    'Статус': status
+                    'Статус': item.isManual ? 'Добавлен вручную' : status
                 };
             });
 
