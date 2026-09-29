@@ -418,8 +418,11 @@
                         const factRaw = findValue(['Факт', 'Fact']);
                         const rawPlanValue = findRawValue(['Plan']);
                         const rawFactValue = findRawValue(['Fact']);
-                        const plan = typeof rawPlanValue === 'number' ? rawPlanValue : parseQuantity(planRaw);
+                        // В отчетах с многострочной шапкой пустое количество означает нулевой остаток.
+                        const plan = typeof rawPlanValue === 'number' ? rawPlanValue : parseQuantity(planRaw, isReinsReport);
                         const fact = typeof rawFactValue === 'number' ? rawFactValue : parseQuantity(factRaw, true);
+                        // Строки группы и общего итога содержат сумму, но не идентификатор товара.
+                        if (isReinsReport && !sku && !barcode) return null;
                         if (!name && !sku && !barcode && plan === 0 && fact === 0) return null;
                         if (!Number.isInteger(plan) || plan < 0) throw new Error(`\u0421\u0442\u0440\u043e\u043a\u0430 ${rowNumber}: \u043f\u043b\u0430\u043d \u0434\u043e\u043b\u0436\u0435\u043d \u0431\u044b\u0442\u044c \u0446\u0435\u043b\u044b\u043c \u0447\u0438\u0441\u043b\u043e\u043c \u043d\u0435 \u043c\u0435\u043d\u044c\u0448\u0435 \u043d\u0443\u043b\u044f.`);
 
